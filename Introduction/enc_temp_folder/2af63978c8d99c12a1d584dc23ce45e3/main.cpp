@@ -122,7 +122,6 @@ class Car
 	int speed;
 public:
 	Car(Engine engine, Tank tank, int max_speed = 250, int accelleration = 10) :
-
 		speed(0),
 		tank(tank),		//Implicit copy constructor
 		engine(engine),	//Implicit copy constructor

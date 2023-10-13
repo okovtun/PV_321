@@ -1,5 +1,10 @@
 ﻿#include<iostream>
+#include<conio.h>
+#include<thread>
 using namespace std;
+
+#define Enter	13
+#define Escape	27
 
 #define MIN_TANK_VOLUME	 35
 #define MAX_TANK_VOLUME	160
@@ -120,6 +125,13 @@ class Car
 	const int MAX_SPEED;
 	const int ACCELERATION;
 	int speed;
+	bool driver_inside;
+	struct
+	{
+		std::thread panel_thread;		//в этом потоке будет запусткаться метод Panel();
+		std::thread engine_idle_thread;
+	} threads;
+	//Treads threads;
 public:
 	Car(Engine engine, Tank tank, int max_speed = 250, int accelleration = 10) :
 
@@ -139,18 +151,94 @@ public:
 			accelleration
 		)
 	{
+		driver_inside = false;
 		cout << "Your car is ready, press Enter to get in" << endl;
 	}
 	~Car()
 	{
 		cout << "Car is over :-(" << endl;
 	}
+	void get_in()
+	{
+		driver_inside = true;
+		threads.panel_thread = std::thread(&Car::panel, this);
+		//std::thread(...) - создаем объект класса 'thread' (создаем поток)
+		//&Car::panel - указатель на метод (member-function), который будет выполняться в потоке.
+		//Для того чтобы в потоке запустит метод, нужно так же указать для какого объекта будет выполняться этот метод
+	}
+	void get_out()
+	{
+		system("CLS");
+		driver_inside = false;
+		//Потоки принято синхронизировать. Метод join() синхронизирует потоки
+		if (threads.panel_thread.joinable())threads.panel_thread.join();
+		//https://legacy.cplusplus.com/reference/thread/thread/join/
+		//https://legacy.cplusplus.com/reference/thread/thread/joinable/
+		cout << "You are out" << endl;
+	}
+	void start()
+	{
+		engine.start();
+		threads.engine_idle_thread = std::thread(&Car::engine_idle, this);
+	}
+	void stop()
+	{
+		engine.stop();
+		if (threads.engine_idle_thread.joinable())threads.engine_idle_thread.join();
+	}
+	void control()
+	{
+		char key;
+		do
+		{
+			key = 0;	//сбрасываем нажатую клавишу
+			if (_kbhit())	//Функция _kbhit() возвращает 'true' при нажатии любой клавиши.
+				key = _getch();	//Ожидает нажатия клавиши, и возвращает ASCII-код нажатой клавиши
+			switch (key)
+			{
+			case Enter:	driver_inside ? get_out() : get_in();	break;
+			case 'F':	//Fill
+			case 'f':
+				if (driver_inside)
+				{
+					cout << "Для начала выйдите из машины!";
+					break;
+				}
+				double fuel;
+				cout << "Введите желаемый объем топлива: "; cin >> fuel;
+				tank.fill(fuel);
+				break;
+			case 'I':	//Ignition - зажигание
+			case 'i':	if (driver_inside)engine.started() ? stop() : start();	break;
+			case Escape:
+				stop();
+				get_out();
+				cout << "Bye" << endl;
+			}
+			if (tank.get_fuel_level() == 0)stop();
+		} while (key != Escape);
+	}
+	void engine_idle()
+	{
+		while (engine.started() && tank.give_fuel(engine.get_consumption_per_second()))
+			std::this_thread::sleep_for(1s);
+	}
+	void panel()
+	{
+		while (driver_inside)
+		{
+			system("CLS");
+			cout << "Fuel level:\t" << tank.get_fuel_level() << " liters.\n";
+			cout << "Engine is" << (engine.started() ? " started" : " stopped") << endl;
+			std::this_thread::sleep_for(1s);
+		}
+	}
 	void info()const
 	{
 		engine.info();
 		tank.info();
 		cout << "Max speed:    \t" << MAX_SPEED << " km/h\n";
-		cout << "Acceleration:\t" << ACCELERATION<< " km/h\n";
+		cout << "Acceleration:\t" << ACCELERATION << " km/h\n";
 		cout << "Speed:\t\t\t" << speed << " km/h\n";
 	}
 };
@@ -176,7 +264,7 @@ void main()
 		cout << "Введите объем топлива: "; cin >> fuel;
 		tank.fill(fuel);
 		tank.info();
-	}
+}
 #endif // TANK_CHECK	//показывает конец блока кода
 
 #ifdef ENGINE_CHECK
@@ -185,5 +273,6 @@ void main()
 #endif // ENGINE_CHECK
 
 	Car car(10, 60);
-	car.info();
+	//car.info();
+	car.control();
 }

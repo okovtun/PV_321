@@ -116,7 +116,7 @@ public:
 
 #define MAX_SPEED_LOW_LIMIT		120
 #define MAX_SPEED_HIGHT_LIMIT	400
-#define MIN_ACCELLERATION		 15
+#define MIN_ACCELLERATION		 10
 #define MAX_ACCELLERATION		 40
 class Car
 {
@@ -128,8 +128,9 @@ class Car
 	bool driver_inside;
 	struct
 	{
-		std::thread panel_thread;		//в этом потоке будет запусткаться метод Panel();
+		std::thread panel_thread;			//в этом потоке будет запусткаться метод Panel();
 		std::thread engine_idle_thread;
+		std::thread free_wheeling_thread;	//силы трения
 	} threads;
 	//Treads threads;
 public:
@@ -186,6 +187,25 @@ public:
 		engine.stop();
 		if (threads.engine_idle_thread.joinable())threads.engine_idle_thread.join();
 	}
+	void accelerate()
+	{
+		if (engine.started())
+		{
+			speed += ACCELERATION;
+			if (speed > MAX_SPEED)speed = MAX_SPEED;
+			std::this_thread::sleep_for(1s);
+			if (speed > 0 && !threads.free_wheeling_thread.joinable())
+				threads.free_wheeling_thread = std::thread(&Car::free_wheeling, this);
+		}
+	}
+	void slow_down()
+	{
+		speed -= ACCELERATION;
+		if (speed < 0)speed = 0;
+		std::this_thread::sleep_for(1s);
+		if (speed ==0 && threads.free_wheeling_thread.joinable())
+			threads.free_wheeling_thread.join();
+	}
 	void control()
 	{
 		char key;
@@ -210,13 +230,40 @@ public:
 				break;
 			case 'I':	//Ignition - зажигание
 			case 'i':	if (driver_inside)engine.started() ? stop() : start();	break;
+			case 'W':
+			case 'w':	accelerate();
+				/*if (driver_inside)
+				{
+					speed += ACCELERATION;
+					if (speed > MAX_SPEED)speed = MAX_SPEED;
+					std::this_thread::sleep_for(1s);
+				}*/
+				break;
+			case 'S':
+			case 's':	slow_down();
+				/*if (driver_inside)
+				{
+					speed -= ACCELERATION;
+					if (speed < 0)speed = 0;
+					std::this_thread::sleep_for(1s);
+				}*/
+					break;
 			case Escape:
 				stop();
 				get_out();
 				cout << "Bye" << endl;
 			}
 			if (tank.get_fuel_level() == 0)stop();
+			/*if (speed > 0 && !threads.free_wheeling_thread.joinable())
+				threads.free_wheeling_thread = std::thread(&Car::free_wheeling, this);*/
+			if (speed == 0 && threads.free_wheeling_thread.joinable())
+				threads.free_wheeling_thread.join();
 		} while (key != Escape);
+	}
+	void free_wheeling()
+	{
+		while (--speed > 0)
+			std::this_thread::sleep_for(1s);
 	}
 	void engine_idle()
 	{
@@ -228,6 +275,7 @@ public:
 		while (driver_inside)
 		{
 			system("CLS");
+			cout << "Speed:\t" << speed << " km/h\n";
 			cout << "Fuel level:\t" << tank.get_fuel_level() << " liters.\n";
 			cout << "Engine is" << (engine.started() ? " started" : " stopped") << endl;
 			std::this_thread::sleep_for(1s);

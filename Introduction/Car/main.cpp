@@ -1,6 +1,7 @@
 ﻿#include<iostream>
 #include<conio.h>
 #include<thread>
+#include<mutex>
 using namespace std;
 
 #define Enter	13
@@ -133,6 +134,8 @@ class Car
 		std::thread free_wheeling_thread;	//силы трения
 	} threads;
 	//Treads threads;
+	mutex mtx;
+	bool busy;	//управление занято
 public:
 	Car(Engine engine, Tank tank, int max_speed = 250, int accelleration = 10) :
 
@@ -153,6 +156,7 @@ public:
 		)
 	{
 		driver_inside = false;
+		busy = false;
 		cout << "Your car is ready, press Enter to get in" << endl;
 	}
 	~Car()
@@ -189,22 +193,29 @@ public:
 	}
 	void accelerate()
 	{
-		if (engine.started())
+		if (driver_inside && engine.started() && !busy)
 		{
 			speed += ACCELERATION;
 			if (speed > MAX_SPEED)speed = MAX_SPEED;
 			std::this_thread::sleep_for(1s);
+			//busy = false;
 			if (speed > 0 && !threads.free_wheeling_thread.joinable())
 				threads.free_wheeling_thread = std::thread(&Car::free_wheeling, this);
+			busy = true;
 		}
 	}
 	void slow_down()
 	{
-		speed -= ACCELERATION;
-		if (speed < 0)speed = 0;
-		std::this_thread::sleep_for(1s);
-		if (speed ==0 && threads.free_wheeling_thread.joinable())
-			threads.free_wheeling_thread.join();
+		if (driver_inside && !busy)
+		{
+			speed -= ACCELERATION;
+			if (speed < 0)speed = 0;
+			std::this_thread::sleep_for(1s);
+			//busy = false;
+			if (speed == 0 && threads.free_wheeling_thread.joinable())
+				threads.free_wheeling_thread.join();
+			busy = true;
+		}
 	}
 	void control()
 	{
@@ -231,7 +242,7 @@ public:
 			case 'I':	//Ignition - зажигание
 			case 'i':	if (driver_inside)engine.started() ? stop() : start();	break;
 			case 'W':
-			case 'w':	accelerate();
+			case 'w':	if(!busy)accelerate();
 				/*if (driver_inside)
 				{
 					speed += ACCELERATION;
@@ -240,7 +251,7 @@ public:
 				}*/
 				break;
 			case 'S':
-			case 's':	slow_down();
+			case 's':	if(!busy)slow_down();
 				/*if (driver_inside)
 				{
 					speed -= ACCELERATION;
@@ -258,6 +269,7 @@ public:
 				threads.free_wheeling_thread = std::thread(&Car::free_wheeling, this);*/
 			if (speed == 0 && threads.free_wheeling_thread.joinable())
 				threads.free_wheeling_thread.join();
+			//std::this_thread::sleep_for(1s);
 		} while (key != Escape);
 	}
 	void free_wheeling()
@@ -268,7 +280,10 @@ public:
 	void engine_idle()
 	{
 		while (engine.started() && tank.give_fuel(engine.get_consumption_per_second()))
+		{
 			std::this_thread::sleep_for(1s);
+			busy = false;
+		}
 	}
 	void panel()
 	{
